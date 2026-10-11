@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pirulito-job
+  labels:
+    app: meow-ops-pirulito
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 60
+  ttlSecondsAfterFinished: 100
+  template:
+    metadata:
+      labels:
+        app: meow-ops-pirulito
+    spec:
+      containers:
+      - name: curl
+        image: curlimages/curl:8.10.1
+        command: ["sh", "-c"]
+        args:
+          - |
+              set -e
+              URL=http://meow-ops-service
+              echo "😼 Pirulito começando a inspeção em $URL ..."
+
+              echo "🔍 check 1: a página responde?"
+              curl -fsS --max-time 5 -o /dev/null "$URL/"
+              echo "✔ check 1 ok"
+
+              echo "🔍 check 2: é mesmo o Meow Ops?"
+              curl -fsS --max-time 5 "$URL/" | grep -q "Meow Ops"
+              echo "✔ check 2 ok"
+
+              echo "🔍 check 3: a foto dos gatinhos carrega?"
+              curl -fsS --max-time 5 -o /dev/null "$URL/assets/image.png"
+              echo "✔ check 3 ok"
+
+              echo "✔ Tudo certo, pode voltar a dormir 😴"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi
+      restartPolicy: Never

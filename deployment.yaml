@@ -15,7 +15,7 @@ spec:
         app: meow-ops-app
     spec:
       containers:
-      - name: nginx
+      - name: meow
         image: lauracode/meow-ops:latest
         ports:
         - containerPort: 80
