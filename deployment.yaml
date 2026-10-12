@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: meow
-        image: lauracode/meow-ops:latest
+        image: lauracode/meow-ops:1.1.0
         ports:
         - containerPort: 80
         resources:
@@ -37,3 +37,11 @@ spec:
             port: 80
           initialDelaySeconds: 5
           periodSeconds: 10
+        volumeMounts:
+          - name: condessa-status
+            mountPath: /usr/share/nginx/html/status
+            readOnly: true
+      volumes:
+        - name: condessa-status
+          configMap:
+            name: condessa-status

@@ -1,0 +1,55 @@
+# Identidade e permissões da Condessa (CronJob de monitoramento do meow-ops)
+
+# 1. Quem ela é
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: condessa
+  labels:
+    app: meow-ops-condessa
+---
+# 2. Onde ela publica o resultado 
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: condessa-status
+  labels:
+    app: meow-ops-condessa
+data:
+  status.json: |
+    {"checkedAt": null, "ok": null, "message": "A Condessa ainda não fez a primeira ronda 🐾"}
+---
+# 3. O que ela pode fazer
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: condessa
+  labels:
+    app: meow-ops-condessa
+rules:
+  # Ler quantas réplicas do app estão prontas
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["meow-ops-deployment"]
+    verbs: ["get"]
+  # Atualizar o próprio ConfigMap de status
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["condessa-status"]
+    verbs: ["get", "patch"]
+---
+# 4. Liga a identidade às permissões
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: condessa
+  labels:
+    app: meow-ops-condessa
+subjects:
+  - kind: ServiceAccount
+    name: condessa
+    namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: condessa

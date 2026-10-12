@@ -1,0 +1,86 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: condessa
+  labels:
+    app: meow-ops-condessa
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 30
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 45
+      template:
+        metadata:
+          labels:
+            app: meow-ops-condessa
+        spec:
+          serviceAccountName: condessa
+          restartPolicy: Never
+          containers:
+          - name: condessa
+            image: alpine/k8s:1.34.0
+            command: ["sh", "-c"]
+            args:
+              - |
+                  APP_URL=http://meow-ops-service
+                  DEPLOY=meow-ops-deployment
+                  CM=condessa-status
+                  NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+                  echo "🐈‍⬛ Condessa iniciando a ronda das $NOW ..."
+
+                  # 1. A página responde? (000 = não conseguiu conectar)
+                  HTTP=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$APP_URL/" || true)
+                  [ "$HTTP" = "000" ] && HTTP=0
+                  echo "🔍 HTTP: $HTTP"
+
+                  # 2. Quantas réplicas estão prontas?
+                  if INFO=$(kubectl get deployment "$DEPLOY" -o jsonpath='{.spec.replicas} {.status.readyReplicas}' 2>&1); then
+                    set -- $INFO
+                    DESIRED=${1:-0}
+                    READY=${2:-0}
+                  else
+                    echo "⚠ não consegui ler o deployment: $INFO"
+                    DESIRED=0
+                    READY=0
+                  fi
+                  echo "🔍 réplicas prontas: $READY/$DESIRED"
+
+                  # 3. Veredito
+                  if [ "$HTTP" != "200" ]; then
+                    STATUS=down
+                    MSG="A página não responde (HTTP $HTTP) 🙀"
+                  elif [ "$READY" -lt "$DESIRED" ]; then
+                    STATUS=degraded
+                    MSG="Só $READY de $DESIRED réplicas prontas 😿"
+                  else
+                    STATUS=up
+                    MSG="Tudo em ordem no reino 👑"
+                  fi
+                  echo "📋 $STATUS: $MSG"
+
+                  # 4. Publica o resultado no ConfigMap
+                  STATUS_JSON=$(jq -n \
+                    --arg checkedAt "$NOW" --arg status "$STATUS" --arg message "$MSG" \
+                    --argjson http "$HTTP" --argjson ready "$READY" --argjson desired "$DESIRED" \
+                    '{checkedAt: $checkedAt, status: $status, ok: ($status == "up"),
+                      http: $http, readyReplicas: $ready, replicas: $desired, message: $message}')
+                  PATCH=$(jq -n --arg s "$STATUS_JSON" '{data: {"status.json": $s}}')
+
+                  if ! kubectl patch configmap "$CM" --type merge -p "$PATCH"; then
+                    echo "✖ não consegui publicar o status no ConfigMap $CM"
+                    exit 1
+                  fi
+                  echo "✔ status publicado. De volta à soneca real 😴"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 100m
+                memory: 128Mi
