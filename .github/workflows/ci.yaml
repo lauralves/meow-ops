@@ -1,0 +1,69 @@
+name: Meow Ops CI
+on:
+  push:
+    branches: 
+      - main 
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  APP_URL: ${{ vars.app_url}}
+jobs:
+  trufflehog:
+    name: trufflehog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: run trufflehog
+        uses: trufflesecurity/trufflehog@v3.99.2
+        with:
+          extra_args: --results=verified,unknown
+  hadolint:
+    name: hadolint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: run hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: app/Dockerfile
+  kubeconform:
+    name: kubeconform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: check manifests
+        run: |
+          docker run --rm -v "$PWD/k8s:/k8s" ghcr.io/yannh/kubeconform:v0.6.7 \
+            -strict -summary /k8s
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    needs: [trufflehog, hadolint, kubeconform]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: build
+        run: docker build -t meow-ops:test app/
+
+      - name: smoke test
+        run: |
+          docker run -d --name meow -p 8080:80 meow-ops:test
+          for _ in $(seq 1 10); do
+            curl -fs "$APP_URL/" > /dev/null && break
+            sleep 1
+          done
+          curl -fsS "$APP_URL/" | grep -q "Meow Ops"
+          curl -fsS -o /dev/null "$APP_URL/assets/image.png"
+          echo "✔ smoke test ok"
+
+      - name: logs do container em caso de falha
+        if: failure()
+        run: docker logs meow
