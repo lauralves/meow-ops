@@ -63,7 +63,15 @@ jobs:
           curl -fsS "$APP_URL/" | grep -q "Meow Ops"
           curl -fsS -o /dev/null "$APP_URL/assets/image.png"
           echo "✔ smoke test ok"
-
+      
+      - name: trivy (scan de vulnerabilidades)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: meow-ops:test
+          severity: CRITICAL, HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          
       - name: logs do container em caso de falha
         if: failure()
         run: docker logs meow
