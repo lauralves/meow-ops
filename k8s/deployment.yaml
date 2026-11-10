@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: meow
-        image: lauracode/meow-ops:1.1.0
+        image: lauracode/meow-ops:25586d965bac4a3802db732efc01101d7b41e2ce
         ports:
         - containerPort: 80
         resources:
